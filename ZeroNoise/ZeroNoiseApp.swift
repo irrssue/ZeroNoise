@@ -11,7 +11,7 @@ import SwiftUI
 struct ZeroNoiseApp: App {
     var body: some Scene {
         WindowGroup {
-            ContentView()
+            PomodoroTimerView()
         }
     }
 }
