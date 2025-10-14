@@ -1,9 +1,3 @@
-//
-//  ContentView.swift
-//  ZeroNoise
-//
-//  Created by Saw Thura Zaw on 10/11/25.
-//
 import SwiftUI
 
 // ZeroNoise - Focus Timer App
@@ -33,18 +27,18 @@ struct ZeroNoiseTimerView: View {
             
             // Timer Display - Tappable area
             ZStack {
-                // Red progress circle (dashed)
+                // Blue progress circle (dashed) - outer countdown indicator
                 Circle()
                     .trim(from: 0, to: progress)
                     .stroke(
-                        Color.red,
+                        Color.blue,
                         style: StrokeStyle(
                             lineWidth: 8,
                             lineCap: .round,
                             dash: [15, 10]
                         )
                     )
-                    .frame(width: 280, height: 280)
+                    .frame(width: 300, height: 300)
                     .rotationEffect(.degrees(-90))
                     .animation(.linear(duration: 1), value: progress)
                 
