@@ -1,10 +1,3 @@
-//
-//  ZeroNoiseApp.swift
-//  ZeroNoise
-//
-//  Created by Saw Thura Zaw on 10/11/25.
-//
-
 import SwiftUI
 
 @main
