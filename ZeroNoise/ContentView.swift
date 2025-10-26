@@ -1,20 +1,49 @@
 import SwiftUI
 
-// ZeroNoise - Focus Timer App
+// Timer Settings Model
+struct TimerSettings {
+    var pomodoro: Int = 25        // minutes
+    var shortBreak: Int = 5       // minutes
+    var longBreak: Int = 15       // minutes
+    var longBreakInterval: Int = 4 // number of pomodoros before long break
+}
 
+// Timer Type Enum
+enum TimerType {
+    case pomodoro
+    case shortBreak
+    case longBreak
+    
+    var displayName: String {
+        switch self {
+        case .pomodoro:
+            return "Focus"
+        case .shortBreak:
+            return "Short Break"
+        case .longBreak:
+            return "Long Break"
+        }
+    }
+}
+
+// Main Timer View
 struct ZeroNoiseTimerView: View {
     @State private var timeRemaining: Int = 25 * 60 // 25 minutes in seconds
     @State private var totalSetTime: Int = 25 * 60 // Total time set by user
     @State private var isActive: Bool = false
     @State private var timer: Timer?
+    @State private var showSettings: Bool = false
+    @State private var dragOffset: CGFloat = 0
+    
+    // New states for Pomodoro functionality
+    @State private var currentTimerType: TimerType = .pomodoro
+    @State private var completedPomodoros: Int = 0
+    @State private var settings = TimerSettings()
     
     // The angle of the drag handle in degrees.
-    // 0 is top, 90 is right, 180 is bottom, 270 is left.
-    // Default: 25 minutes = (25/120) * 360 = 75 degrees.
     @State private var dragAngle: Double = 75.0
     
     var progress: Double {
-        // Ensure we don't divide by zero if totalSetTime is 0
         guard totalSetTime > 0 else { return 0 }
         return Double(timeRemaining) / Double(totalSetTime)
     }
@@ -31,9 +60,8 @@ struct ZeroNoiseTimerView: View {
     
     // Calculate time from angle (clockwise from top)
     var timeFromAngle: Int {
-        // 360 degrees = 120 minutes (2 hours max)
-        let minutes = Int(round(dragAngle / 3.0)) // 360 degrees / 120 minutes = 3 degrees per minute
-        return max(minutes, 0) * 60 // Convert to seconds, allow 0 minutes
+        let minutes = Int(round(dragAngle / 3.0))
+        return max(minutes, 0) * 60
     }
     
     var body: some View {
@@ -43,101 +71,177 @@ struct ZeroNoiseTimerView: View {
                 Color(red: 0.95, green: 0.95, blue: 0.95)
                     .ignoresSafeArea()
                 
-                // Timer Display
-                ZStack {
-                    // Thin outer circle (background)
-                    Circle()
-                        .stroke(Color.gray.opacity(0.3), lineWidth: 4)
-                        .frame(width: 300, height: 300)
+                VStack(spacing: 20) {
+                    // Timer Type Label
+                    Text(currentTimerType.displayName)
+                        .font(.title2)
+                        .foregroundColor(.black.opacity(0.7))
+                        .padding(.top, 50)
                     
-                    // Thick progress arc (shows set time or countdown)
-                    Circle()
-                        .trim(from: 0, to: isActive ? progress : (dragAngle / 360.0))
-                        .stroke(Color.black, style: StrokeStyle(lineWidth: 12, lineCap: .round))
-                        .frame(width: 300, height: 300)
-                        .rotationEffect(.degrees(-90))
-                        .animation(.linear(duration: isActive ? 1 : 0), value: isActive ? progress : dragAngle)
+                    Spacer()
                     
-                    // Inner circle
-                    Circle()
-                        .stroke(Color.black, lineWidth: 4)
-                        .frame(width: 280, height: 280)
-                    
-                    // Time text with different sizes for minutes and seconds
-                    HStack(alignment: .firstTextBaseline, spacing: 0) {
-                        Text(minutesString)
-                            .font(.system(size: 72, weight: .regular, design: .default))
-                            .foregroundColor(.black)
-                        
-                        Text(secondsString)
-                            .font(.system(size: 45, weight: .regular, design: .default))
-                            .foregroundColor(.black)
-                    }
-                    .onTapGesture {
-                        toggleTimer()
-                    }
-                    
-                    // Draggable indicator (only show when not active)
-                    if !isActive {
+                    // Timer Display
+                    ZStack {
+                        // Thin outer circle (background)
                         Circle()
-                            .fill(Color.black)
-                            .frame(width: 24, height: 24)
-                            .offset(y: -150) // The radius of the timer ring
-                            .rotationEffect(.degrees(dragAngle))
-                            .gesture(
-                                DragGesture(minimumDistance: 0, coordinateSpace: .named("timerRing"))
-                                    .onChanged { value in
-                                        updateAngleFromDrag(
-                                            location: value.location,
-                                            geometry: geometry
-                                        )
-                                    }
-                            )
+                            .stroke(Color.gray.opacity(0.3), lineWidth: 4)
+                            .frame(width: 300, height: 300)
+                        
+                        // Thick progress arc
+                        Circle()
+                            .trim(from: 0, to: isActive ? progress : (dragAngle / 360.0))
+                            .stroke(timerColor(), style: StrokeStyle(lineWidth: 12, lineCap: .round))
+                            .frame(width: 300, height: 300)
+                            .rotationEffect(.degrees(-90))
+                            .animation(.linear(duration: isActive ? 1 : 0), value: isActive ? progress : dragAngle)
+                        
+                        // Inner circle
+                        Circle()
+                            .stroke(timerColor(), lineWidth: 4)
+                            .frame(width: 280, height: 280)
+                        
+                        // Clickable area (invisible circle that covers the entire inner area)
+                        Circle()
+                            .fill(Color.white.opacity(0.01)) // Nearly invisible but still interactive
+                            .frame(width: 280, height: 280)
+                            .onTapGesture(count: 2) {
+                                // Double tap to restart
+                                restartTimer()
+                            }
+                            .onTapGesture {
+                                // Single tap to toggle
+                                toggleTimer()
+                            }
+                        
+                        // Time text
+                        HStack(alignment: .firstTextBaseline, spacing: 0) {
+                            Text(minutesString)
+                                .font(.system(size: 72, weight: .regular, design: .default))
+                                .foregroundColor(.black)
+                            
+                            Text(secondsString)
+                                .font(.system(size: 45, weight: .regular, design: .default))
+                                .foregroundColor(.black)
+                        }
+                        .allowsHitTesting(false) // Make text non-interactive so taps pass through
+                        
+                        // Draggable indicator (only show when not active)
+                        if !isActive {
+                            Circle()
+                                .fill(timerColor())
+                                .frame(width: 24, height: 24)
+                                .offset(y: -150)
+                                .rotationEffect(.degrees(dragAngle))
+                                .gesture(
+                                    DragGesture(minimumDistance: 0, coordinateSpace: .named("timerRing"))
+                                        .onChanged { value in
+                                            updateAngleFromDrag(
+                                                location: value.location,
+                                                geometry: geometry
+                                            )
+                                        }
+                                )
+                        }
                     }
+                    .frame(width: 300, height: 300)
+                    .coordinateSpace(name: "timerRing")
+                    
+                    Spacer()
+                    
+                    // Settings Button
+                    Button(action: {
+                        withAnimation(.spring()) {
+                            showSettings = true
+                        }
+                    }) {
+                        Image(systemName: "slider.horizontal.3")
+                            .font(.system(size: 29))
+                            .foregroundColor(.black.opacity(0.6))
+                            .frame(width: 44, height: 44)
+                    }
+                    .padding(.bottom, 30)
                 }
-                .frame(width: geometry.size.width, height: geometry.size.height)
-                .coordinateSpace(name: "timerRing")
+                
+                // Settings Sheet
+                if showSettings {
+                    SettingsView(
+                        showSettings: $showSettings,
+                        settings: $settings,
+                        onSettingsChange: updateCurrentTimer
+                    )
+                    .transition(.move(edge: .bottom))
+                    .zIndex(1)
+                }
             }
+            .gesture(
+                DragGesture()
+                    .onEnded { value in
+                        if value.translation.height < -50 && !showSettings {
+                            withAnimation(.spring()) {
+                                showSettings = true
+                            }
+                        }
+                    }
+            )
+        }
+        .onAppear {
+            setupInitialTimer()
         }
     }
     
-    /// Updates the timer's angle based on the drag gesture location.
-    /// - Parameters:
-    ///   - location: The location of the touch, provided in the "timerRing" coordinate space.
-    ///   - geometry: The geometry proxy of the main view to find the center point.
+    func timerColor() -> Color {
+        switch currentTimerType {
+        case .pomodoro:
+            return Color.black
+        case .shortBreak:
+            return Color.blue
+        case .longBreak:
+            return Color.green
+        }
+    }
+    
+    func setupInitialTimer() {
+        let minutes = settings.pomodoro
+        timeRemaining = minutes * 60
+        totalSetTime = minutes * 60
+        dragAngle = Double(minutes) * 3.0
+    }
+    
+    func updateCurrentTimer() {
+        if !isActive {
+            let minutes: Int
+            switch currentTimerType {
+            case .pomodoro:
+                minutes = settings.pomodoro
+            case .shortBreak:
+                minutes = settings.shortBreak
+            case .longBreak:
+                minutes = settings.longBreak
+            }
+            timeRemaining = minutes * 60
+            totalSetTime = minutes * 60
+            dragAngle = Double(minutes) * 3.0
+        }
+    }
+    
     func updateAngleFromDrag(location: CGPoint, geometry: GeometryProxy) {
-        // The center of the view, which is the center of our timer circle
-        let center = CGPoint(x: geometry.size.width / 2, y: geometry.size.height / 2)
-        
-        // Calculate the vector from the center to the user's touch location
+        let center = CGPoint(x: 150, y: 150) // Center of 300x300 timer
         let vector = CGVector(dx: location.x - center.x, dy: location.y - center.y)
-        
-        // Calculate the angle in radians from the positive X-axis (right)
-        // atan2 provides a result between -pi and pi
         let angleRadians = atan2(vector.dy, vector.dx)
-        
-        // Convert to degrees (from -180 to 180)
         var angleDegrees = angleRadians * 180 / .pi
-        
-        // Shift so that 0 degrees is at the top (12 o'clock) instead of right (3 o'clock)
         angleDegrees += 90
-        
-        // Normalize to a 0-360 range
         if angleDegrees < 0 {
             angleDegrees += 360
         }
         
-        // Update the state
         dragAngle = angleDegrees
-        
-        // Update the time based on the new angle
         let newTime = timeFromAngle
         timeRemaining = newTime
         totalSetTime = newTime
     }
     
     func toggleTimer() {
-        if timeRemaining == 0 { return } // Don't start a 0-second timer
+        if timeRemaining == 0 { return }
         
         if isActive {
             stopTimer()
@@ -156,11 +260,7 @@ struct ZeroNoiseTimerView: View {
             } else {
                 stopTimer()
                 isActive = false
-                // Reset to default 25 minutes after completion
-                let defaultTime = 25 * 60
-                timeRemaining = defaultTime
-                totalSetTime = defaultTime
-                dragAngle = 75.0 // (25 / 120) * 360
+                handleTimerComplete()
             }
         }
     }
@@ -168,6 +268,237 @@ struct ZeroNoiseTimerView: View {
     func stopTimer() {
         timer?.invalidate()
         timer = nil
+    }
+    
+    func handleTimerComplete() {
+        switch currentTimerType {
+        case .pomodoro:
+            completedPomodoros += 1
+            if completedPomodoros % settings.longBreakInterval == 0 {
+                currentTimerType = .longBreak
+                let minutes = settings.longBreak
+                timeRemaining = minutes * 60
+                totalSetTime = minutes * 60
+                dragAngle = Double(minutes) * 3.0
+            } else {
+                currentTimerType = .shortBreak
+                let minutes = settings.shortBreak
+                timeRemaining = minutes * 60
+                totalSetTime = minutes * 60
+                dragAngle = Double(minutes) * 3.0
+            }
+        case .shortBreak, .longBreak:
+            currentTimerType = .pomodoro
+            let minutes = settings.pomodoro
+            timeRemaining = minutes * 60
+            totalSetTime = minutes * 60
+            dragAngle = Double(minutes) * 3.0
+        }
+        
+        // Play notification sound or haptic feedback here
+        // AudioServicesPlaySystemSound(1315) // For example
+    }
+    
+    func restartTimer() {
+        // Stop any active timer
+        if isActive {
+            stopTimer()
+            isActive = false
+        }
+        
+        // Reset to initial state
+        currentTimerType = .pomodoro
+        completedPomodoros = 0
+        
+        // Set timer to pomodoro duration
+        let minutes = settings.pomodoro
+        timeRemaining = minutes * 60
+        totalSetTime = minutes * 60
+        dragAngle = Double(minutes) * 3.0
+        
+        // Optional: Add haptic feedback for restart
+        let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+        impactFeedback.impactOccurred()
+    }
+}
+
+// Settings View
+struct SettingsView: View {
+    @Binding var showSettings: Bool
+    @Binding var settings: TimerSettings
+    let onSettingsChange: () -> Void
+    
+    @State private var tempSettings: TimerSettings
+    
+    init(showSettings: Binding<Bool>, settings: Binding<TimerSettings>, onSettingsChange: @escaping () -> Void) {
+        self._showSettings = showSettings
+        self._settings = settings
+        self.onSettingsChange = onSettingsChange
+        self._tempSettings = State(initialValue: settings.wrappedValue)
+    }
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Drag indicator
+            RoundedRectangle(cornerRadius: 2.5)
+                .fill(Color.gray.opacity(0.4))
+                .frame(width: 40, height: 5)
+                .padding(.top, 10)
+                .padding(.bottom, 20)
+            
+            // Settings Header
+            HStack {
+                Button("Cancel") {
+                    withAnimation(.spring()) {
+                        showSettings = false
+                    }
+                }
+                .foregroundColor(.black)
+                
+                Spacer()
+                
+                Text("Settings")
+                    .font(.headline)
+                    .foregroundColor(.black)
+                
+                Spacer()
+                
+                Button("Done") {
+                    settings = tempSettings
+                    onSettingsChange()
+                    withAnimation(.spring()) {
+                        showSettings = false
+                    }
+                }
+                .foregroundColor(.black)
+                .fontWeight(.semibold)
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 30)
+            
+            // Timer Duration Section
+            VStack(alignment: .leading, spacing: 20) {
+                HStack {
+                    Image(systemName: "clock")
+                        .font(.system(size: 20))
+                    Text("Timer Duration")
+                        .font(.title3)
+                        .fontWeight(.semibold)
+                }
+                .foregroundColor(.black)
+                .padding(.horizontal, 20)
+                
+                VStack(spacing: 0) {
+                    // Pomodoro
+                    TimerSettingRow(
+                        label: "Pomodoro",
+                        value: $tempSettings.pomodoro,
+                        minValue: 1,
+                        maxValue: 60
+                    )
+                    
+                    Divider()
+                        .padding(.horizontal, 20)
+                    
+                    // Short Break
+                    TimerSettingRow(
+                        label: "Short Break",
+                        value: $tempSettings.shortBreak,
+                        minValue: 1,
+                        maxValue: 30
+                    )
+                    
+                    Divider()
+                        .padding(.horizontal, 20)
+                    
+                    // Long Break
+                    TimerSettingRow(
+                        label: "Long Break",
+                        value: $tempSettings.longBreak,
+                        minValue: 1,
+                        maxValue: 60
+                    )
+                    
+                    Divider()
+                        .padding(.horizontal, 20)
+                    
+                    // Long Break Interval
+                    TimerSettingRow(
+                        label: "Long Break Interval",
+                        value: $tempSettings.longBreakInterval,
+                        minValue: 2,
+                        maxValue: 10
+                    )
+                }
+                .background(Color.white)
+                .cornerRadius(12)
+                .padding(.horizontal, 20)
+            }
+            
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(red: 0.95, green: 0.95, blue: 0.95))
+        .gesture(
+            DragGesture()
+                .onEnded { value in
+                    if value.translation.height > 50 {
+                        withAnimation(.spring()) {
+                            showSettings = false
+                        }
+                    }
+                }
+        )
+    }
+}
+
+// Timer Setting Row Component
+struct TimerSettingRow: View {
+    let label: String
+    @Binding var value: Int
+    let minValue: Int
+    let maxValue: Int
+    
+    var body: some View {
+        HStack {
+            Text(label)
+                .foregroundColor(.black)
+            
+            Spacer()
+            
+            HStack(spacing: 20) {
+                Button(action: {
+                    if value > minValue {
+                        value -= 1
+                    }
+                }) {
+                    Image(systemName: "minus")
+                        .font(.system(size: 20))
+                        .foregroundColor(value > minValue ? .black : .gray.opacity(0.3))
+                        .frame(width: 30, height: 30)
+                }
+                .disabled(value <= minValue)
+                
+                Text("\(value)")
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundColor(.black)
+                    .frame(width: 40)
+                
+                Button(action: {
+                    if value < maxValue {
+                        value += 1
+                    }
+                }) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 20))
+                        .foregroundColor(value < maxValue ? .black : .gray.opacity(0.3))
+                        .frame(width: 30, height: 30)
+                }
+                .disabled(value >= maxValue)
+            }
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 15)
     }
 }
 
