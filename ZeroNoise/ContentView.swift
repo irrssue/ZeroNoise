@@ -6,6 +6,8 @@ struct TimerSettings {
     var shortBreak: Int = 5       // minutes
     var longBreak: Int = 15       // minutes
     var longBreakInterval: Int = 4 // number of pomodoros before long break
+    var autoStartBreaks: Bool = false
+    var autoStartPomodoros: Bool = false
 }
 
 // Timer Type Enum
@@ -155,7 +157,7 @@ struct ZeroNoiseTimerView: View {
                         }
                     }) {
                         Image(systemName: "slider.horizontal.3")
-                            .font(.system(size: 29))
+                            .font(.system(size: 24))
                             .foregroundColor(.black.opacity(0.6))
                             .frame(width: 44, height: 44)
                     }
@@ -271,6 +273,10 @@ struct ZeroNoiseTimerView: View {
     }
     
     func handleTimerComplete() {
+        // Play notification sound or haptic feedback
+        let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+        impactFeedback.impactOccurred()
+        
         switch currentTimerType {
         case .pomodoro:
             completedPomodoros += 1
@@ -287,16 +293,30 @@ struct ZeroNoiseTimerView: View {
                 totalSetTime = minutes * 60
                 dragAngle = Double(minutes) * 3.0
             }
+            
+            // Auto-start breaks if enabled
+            if settings.autoStartBreaks && timeRemaining > 0 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    startTimer()
+                    isActive = true
+                }
+            }
+            
         case .shortBreak, .longBreak:
             currentTimerType = .pomodoro
             let minutes = settings.pomodoro
             timeRemaining = minutes * 60
             totalSetTime = minutes * 60
             dragAngle = Double(minutes) * 3.0
+            
+            // Auto-start pomodoros if enabled
+            if settings.autoStartPomodoros && timeRemaining > 0 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+                    startTimer()
+                    isActive = true
+                }
+            }
         }
-        
-        // Play notification sound or haptic feedback here
-        // AudioServicesPlaySystemSound(1315) // For example
     }
     
     func restartTimer() {
@@ -429,6 +449,60 @@ struct SettingsView: View {
                         minValue: 2,
                         maxValue: 10
                     )
+                }
+                .background(Color.white)
+                .cornerRadius(12)
+                .padding(.horizontal, 20)
+            }
+            
+            // Auto-Start Section
+            VStack(alignment: .leading, spacing: 20) {
+                Text("Auto-Start")
+                    .font(.title3)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.black)
+                    .padding(.horizontal, 20)
+                    .padding(.top, 30)
+                
+                VStack(spacing: 0) {
+                    // Auto Start Breaks
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Auto Start Breaks")
+                                .foregroundColor(.black)
+                            Text("Start breaks automatically")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        }
+                        
+                        Spacer()
+                        
+                        Toggle("", isOn: $tempSettings.autoStartBreaks)
+                            .tint(.black)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 15)
+                    
+                    Divider()
+                        .padding(.horizontal, 20)
+                    
+                    // Auto Start Pomodoros
+                    HStack {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Auto Start Pomodoros")
+                                .foregroundColor(.black)
+                            Text("Start work time automatically")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                        }
+                        
+                        Spacer()
+                        
+                        Toggle("", isOn: $tempSettings.autoStartPomodoros)
+                            .tint(.black)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 15)
                 }
                 .background(Color.white)
                 .cornerRadius(12)
